@@ -1,22 +1,26 @@
-# Lab 2 - Object storage with S3: progress notes
+# Lab 2 - Object storage with S3: notes
 
-Date: 2026-10-09
+Completed on 2026-10-16.
 
-## Done
+## Results
 
-- Created the `default` AWS profile from the Onyxia environment variables (it did not exist in the service).
-- Endpoint: https://s3.seaweedfs.adm.adaltas.cloud
-- Bucket `user-p-veyret-ece` created through the Onyxia file explorer and visible with `aws s3 ls`.
-- Installed s5cmd in `~/.local/bin`.
-- Generated `users.csv` (7351 bytes) with `uv run dataset-users -o csv`.
+- Bucket `user-p-veyret-ece` on SeaweedFS (https://s3.seaweedfs.adm.adaltas.cloud).
+- Basic operations: upload, list (aws s3 and s5cmd), download (identical to the original), rename, delete.
+- Metadata: the ETag of a single PUT equals the MD5 of the file; user-defined metadata is returned by `head-object`.
+- Presigned GET URL downloaded with curl, without credentials. Presigned PUT URL generated with boto3.
+- Multipart: a 200 MB file was uploaded in 25 parts (ETag ending in `-25`).
+- Versioning: 3 versions (including a `null` version for the object uploaded before versioning was enabled), restore of a previous version, delete marker.
+- Lifecycle: the 3 rules were accepted by SeaweedFS.
+- Bucket policy: the Deny on `s3:DeleteObject` under `bronze/` is enforced for authenticated users (`AccessDenied`).
+- Object ACL: owner `admin` with `FULL_CONTROL`.
+- Consistency: read-after-write is immediate.
+- Kubernetes Job: `users.csv` and `orders.csv` uploaded to `bronze/` from a Job using a ConfigMap and a Secret.
 
-## Blocked
+## Issues met and fixes
 
-Every upload to the bucket fails with an HTTP 500 from the storage backend:
-
-
-- Same error with `aws s3 cp` and with `s5cmd cp`, even for a 6-byte test file.
-- `aws s3 ls` and `aws s3api head-bucket` work, so the credentials and the bucket are fine.
-- Request id: 18DCE73D566FBDFCE51E2C37
-
-The rest of the lab will be done once uploads work again.
+- No `default` AWS profile in the service: created it from the `AWS_*` environment variables.
+- Storage returned `InternalError` (HTTP 500) on every PutObject (9 and 12 October): platform issue, fixed by the instructor.
+- Expired credentials after the fix (`InvalidAccessKeyId`): reloaded fresh credentials from the Onyxia portal.
+- AWS CLI checksums: set `request_checksum_calculation` and `response_checksum_validation` to `when_required` for SeaweedFS compatibility, in the profile and in the Job's ConfigMap.
+- The Job was refused by the namespace quota (`must specify limits.cpu`): added `limits.cpu: 200m` to the container.
+- `cp ... /dev/null` returns an error code because the file date cannot be updated: the consistency check was done with a temporary file instead.
